@@ -1,48 +1,191 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Chat</title>
+<title>Chat OpenRouter</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+body {
+  margin: 0;
+  background: #343541;
+  font-family: Arial, sans-serif;
+  display: flex;
+  justify-content: center;
+  height: 100vh;
+}
+
+.chat-wrapper {
+  width: 900px;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.message {
+  margin-bottom: 20px;
+  line-height: 1.6;
+}
+
+.user {
+  text-align: right;
+  color: white;
+}
+
+.assistant {
+  background: #444654;
+  color: white;
+  padding: 15px;
+  border-radius: 8px;
+}
+
+.copy-btn {
+  margin-top: 10px;
+  background: #19c37d;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: white;
+}
+
+.input-area {
+  display: flex;
+  padding: 15px;
+  background: #40414f;
+}
+
+input {
+  flex: 1;
+  padding: 15px;
+  border-radius: 6px;
+  border: none;
+  font-size: 16px;
+}
+
+button.send-btn {
+  margin-left: 10px;
+  padding: 15px 20px;
+  border-radius: 6px;
+  border: none;
+  background: #19c37d;
+  color: white;
+  cursor: pointer;
+}
+</style>
 </head>
 <body>
 
-<h2>Chat OpenRouter</h2>
+<div class="chat-wrapper">
+  <div class="messages" id="messages"></div>
 
-<input id="msg" placeholder="Digite..." />
-<button onclick="send()">Enviar</button>
-
-<pre id="output"></pre>
+  <div class="input-area">
+    <input id="userInput" placeholder="Digite sua pergunta..." />
+    <button class="send-btn" onclick="sendMessage()">Enviar</button>
+  </div>
+</div>
 
 <script>
-async function send() {
+const SYSTEM_PROMPT = "Você é um assistente especialista em programação e responde sempre em português usando Markdown bem formatado.";
 
-  const text = document.getElementById("msg").value;
-  const output = document.getElementById("output");
-  output.textContent = "";
+let conversation = JSON.parse(localStorage.getItem("chat_history")) || [
+  { role: "system", content: SYSTEM_PROMPT }
+];
 
-  const response = await fetch("/api/chat", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: "openrouter/free",
-      messages: [{ role: "user", content: text }],
-      stream: true
-    })
+const messagesDiv = document.getElementById("messages");
+const userInput = document.getElementById("userInput");
+
+function saveHistory() {
+  localStorage.setItem("chat_history", JSON.stringify(conversation));
+}
+
+function addMessage(content, role) {
+  const wrapper = document.createElement("div");
+  wrapper.classList.add("message", role);
+
+  if (role === "assistant") {
+    wrapper.classList.add("assistant");
+
+    const contentDiv = document.createElement("div");
+    contentDiv.innerHTML = marked.parse(content);
+
+    const copyBtn = document.createElement("button");
+    copyBtn.textContent = "📋 Copiar";
+    copyBtn.classList.add("copy-btn");
+
+    copyBtn.onclick = async () => {
+      await navigator.clipboard.writeText(content);
+      copyBtn.textContent = "✅ Copiado!";
+      setTimeout(() => copyBtn.textContent = "📋 Copiar", 1500);
+    };
+
+    wrapper.appendChild(contentDiv);
+    wrapper.appendChild(copyBtn);
+
+  } else {
+    wrapper.textContent = content;
+  }
+
+  messagesDiv.appendChild(wrapper);
+  messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
+function renderHistory() {
+  messagesDiv.innerHTML = "";
+  conversation.forEach(msg => {
+    if (msg.role !== "system") {
+      addMessage(msg.content, msg.role);
+    }
   });
+}
 
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
+async function sendMessage() {
+  const text = userInput.value.trim();
+  if (!text) return;
+  userInput.value = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  addMessage(text, "user");
+  conversation.push({ role: "user", content: text });
+  //saveHistory();
 
-    const chunk = decoder.decode(value);
-    output.textContent += chunk;
+  const loadingDiv = addMessage("Pensando...", "assistant");
+
+  try {
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "openrouter/free", messages: conversation, stream: true })
+    });
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let result = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      result += decoder.decode(value);
+      loadingDiv.querySelector("div").innerHTML = marked.parse(result);
+    }
+
+    conversation.push({ role: "assistant", content: result });
+    saveHistory();
+
+  } catch (err) {
+    loadingDiv.querySelector("div").innerHTML = "Erro: " + err.message;
   }
 }
+
+userInput.addEventListener("keypress", e => {
+  if (e.key === "Enter") sendMessage();
+});
+
+//renderHistory();
 </script>
 
 </body>
