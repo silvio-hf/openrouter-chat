@@ -124,7 +124,7 @@ function addMessage(content, role) {
   messagesDiv.appendChild(wrapper);
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
 
-  return wrapper; // Retorno necessário para atualizar streaming
+  return wrapper; // retorno necessário para atualizar streaming
 }
 
 function renderHistory() {
@@ -143,7 +143,7 @@ async function sendMessage() {
   conversation.push({ role: "user", content: text });
 
 
-  const loadingDiv = addMessage("", "assistant"); // começa vazio
+  const loadingDiv = addMessage("", "assistant");
   let buffer = "";
 
   try {
@@ -165,8 +165,8 @@ async function sendMessage() {
       if (done) break;
 
       const chunk = decoder.decode(value, { stream: true });
-
       const lines = chunk.split("\n").filter(l => l.startsWith("data: "));
+
       for (const line of lines) {
         const payload = line.replace(/^data: /, "").trim();
         if (!payload || payload === "[DONE]") continue;
@@ -175,24 +175,21 @@ async function sendMessage() {
           const json = JSON.parse(payload);
           const content = json.choices?.[0]?.delta?.content || "";
 
-          // adiciona espaço automático se o último char e o novo não tiver espaço
+          // adiciona espaço automático para evitar palavras coladas
           if (buffer && !/\s$/.test(buffer) && !/^[\s.,!?]/.test(content)) buffer += " ";
 
           buffer += content;
 
           const contentDiv = loadingDiv.querySelector("div");
-          if (contentDiv) {
-            // atualiza a cada palavra completa ou pontuação
-            if (buffer.match(/[.!?]\s$/) || buffer.length < 50) {
-              contentDiv.innerHTML = marked.parse(buffer);
-            }
+          if (contentDiv && (buffer.match(/[.!?]\s$/) || buffer.length < 50)) {
+            contentDiv.innerHTML = marked.parse(buffer);
           }
 
-        } catch(e) { }
+        } catch(e) { /* ignora erros de parse */ }
       }
     }
 
-    // renderiza todo texto final
+    // renderiza texto final
     const contentDiv = loadingDiv.querySelector("div");
     if (contentDiv) contentDiv.innerHTML = marked.parse(buffer);
 
