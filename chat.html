@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Chat</title>
+</head>
+<body>
+
+<h2>Chat OpenRouter</h2>
+
+<input id="msg" placeholder="Digite..." />
+<button onclick="send()">Enviar</button>
+
+<pre id="output"></pre>
+
+<script>
+async function send() {
+
+  const text = document.getElementById("msg").value;
+  const output = document.getElementById("output");
+  output.textContent = "";
+
+  const response = await fetch("/api/chat", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: "openrouter/free",
+      messages: [{ role: "user", content: text }],
+      stream: true
+    })
+  });
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    const chunk = decoder.decode(value);
+    output.textContent += chunk;
+  }
+}
+</script>
+
+</body>
+</html>
