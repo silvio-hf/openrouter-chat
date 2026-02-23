@@ -134,7 +134,7 @@ function addMessage(content, role) {
   messagesDiv.appendChild(wrapper);
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
 
-  return wrapper; // necessário para atualizar streaming
+  return wrapper; // retorna para atualizar streaming
 }
 
 function renderHistory() {
@@ -156,6 +156,7 @@ async function sendMessage() {
   saveHistory();
 
   const loadingDiv = addMessage("", "assistant"); // começa vazio
+  let buffer = "";
 
   try {
     const response = await fetch("/api/chat", {
@@ -170,7 +171,6 @@ async function sendMessage() {
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let result = "";
 
     while (true) {
       const { done, value } = await reader.read();
@@ -178,7 +178,7 @@ async function sendMessage() {
 
       const chunk = decoder.decode(value, { stream: true });
 
-      // processa apenas linhas que começam com "data: "
+      // filtra apenas linhas começando com "data:"
       const lines = chunk.split("\n").filter(l => l.startsWith("data: "));
       for (const line of lines) {
         const payload = line.replace(/^data: /, "").trim();
@@ -187,18 +187,25 @@ async function sendMessage() {
         try {
           const json = JSON.parse(payload);
           const content = json.choices?.[0]?.delta?.content || "";
-          result += content;
+          buffer += content;
 
           const contentDiv = loadingDiv.querySelector("div");
-          if (contentDiv) contentDiv.innerHTML = marked.parse(result);
+          if (contentDiv) {
+            // só renderiza Markdown a cada pontuação final para evitar truncamentos
+            if (buffer.match(/[.!?]\s$/) || buffer.length < 50) {
+              contentDiv.innerHTML = marked.parse(buffer);
+            }
+          }
 
-        } catch(e) {
-          // ignora linhas não JSON
-        }
+        } catch (e) { /* ignora */ }
       }
     }
 
-    conversation.push({ role: "assistant", content: result });
+    // garante que todo texto final é renderizado
+    const contentDiv = loadingDiv.querySelector("div");
+    if (contentDiv) contentDiv.innerHTML = marked.parse(buffer);
+
+    conversation.push({ role: "assistant", content: buffer });
     saveHistory();
 
   } catch (err) {
