@@ -1,213 +1,146 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<title>Chat OpenRouter</title>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<style>
-body {
-  margin: 0;
-  background: #343541;
-  font-family: Arial, sans-serif;
-  display: flex;
-  justify-content: center;
-  height: 100vh;
-}
-.chat-wrapper {
-  width: 900px;
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-}
-.messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px;
-}
-.message {
-  margin-bottom: 20px;
-  line-height: 1.6;
-}
-.user {
-  text-align: right;
-  color: white;
-}
-.assistant {
-  background: #444654;
-  color: white;
-  padding: 15px;
-  border-radius: 8px;
-}
-.copy-btn {
-  margin-top: 10px;
-  background: #19c37d;
-  border: none;
-  padding: 6px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  color: white;
-}
-.input-area {
-  display: flex;
-  padding: 15px;
-  background: #40414f;
-}
-input {
-  flex: 1;
-  padding: 15px;
-  border-radius: 6px;
-  border: none;
-  font-size: 16px;
-}
-button.send-btn {
-  margin-left: 10px;
-  padding: 15px 20px;
-  border-radius: 6px;
-  border: none;
-  background: #19c37d;
-  color: white;
-  cursor: pointer;
-}
-</style>
+    <meta charset="UTF-8">
+    <title>Chat OpenRouter Corrigido</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body { margin: 0; background: #343541; font-family: 'Segoe UI', Arial, sans-serif; display: flex; justify-content: center; height: 100vh; }
+        .chat-wrapper { width: 100%; max-width: 900px; display: flex; flex-direction: column; height: 100vh; }
+        .messages { flex: 1; overflow-y: auto; padding: 20px; scroll-behavior: smooth; }
+        .message { margin-bottom: 20px; line-height: 1.6; word-wrap: break-word; }
+        .user { text-align: right; color: #ececf1; align-self: flex-end; max-width: 80%; background: #444654; padding: 10px 15px; border-radius: 15px; margin-left: auto; }
+        .assistant { background: #444654; color: #ececf1; padding: 20px; border-radius: 8px; border: 1px solid #565869; }
+        
+        /* Ajuste para o Markdown não quebrar layout */
+        .assistant pre { background: #000; padding: 10px; overflow-x: auto; border-radius: 5px; }
+        .assistant code { font-family: monospace; background: #202123; padding: 2px 4px; }
+        
+        .copy-btn { margin-top: 10px; background: #19c37d; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; color: white; font-weight: bold; }
+        .input-area { display: flex; padding: 20px; background: #40414f; gap: 10px; }
+        input { flex: 1; padding: 15px; border-radius: 6px; border: 1px solid #565869; background: #40414f; color: white; font-size: 16px; outline: none; }
+        button.send-btn { padding: 0 20px; border-radius: 6px; border: none; background: #19c37d; color: white; cursor: pointer; font-weight: bold; }
+        button.send-btn:hover { background: #1aae71; }
+    </style>
 </head>
 <body>
 
 <div class="chat-wrapper">
-  <div class="messages" id="messages"></div>
-  <div class="input-area">
-    <input id="userInput" placeholder="Digite sua pergunta..." />
-    <button class="send-btn" onclick="sendMessage()">Enviar</button>
-  </div>
+    <div class="messages" id="messages"></div>
+    <div class="input-area">
+        <input id="userInput" placeholder="Digite sua pergunta..." autofocus />
+        <button class="send-btn" onclick="sendMessage()">Enviar</button>
+    </div>
 </div>
 
 <script>
-const SYSTEM_PROMPT = "Você é um assistente especialista em programação e responde sempre em português usando Markdown bem formatado.";
+const SYSTEM_PROMPT = "Você é um assistente especialista em programação. Responda sempre em português. Use Markdown para formatar tabelas, negritos e blocos de código.";
 
 let conversation = JSON.parse(localStorage.getItem("chat_history")) || [
-  { role: "system", content: SYSTEM_PROMPT }
+    { role: "system", content: SYSTEM_PROMPT }
 ];
 
 const messagesDiv = document.getElementById("messages");
 const userInput = document.getElementById("userInput");
 
-function saveHistory() {
-  localStorage.setItem("chat_history", JSON.stringify(conversation));
-}
-
 function addMessage(content, role) {
-  const wrapper = document.createElement("div");
-  wrapper.classList.add("message", role);
-
-  if (role === "assistant") {
-    wrapper.classList.add("assistant");
-
+    const wrapper = document.createElement("div");
+    wrapper.classList.add("message", role);
+    
     const contentDiv = document.createElement("div");
-    contentDiv.innerHTML = marked.parse(content);
-
-    const copyBtn = document.createElement("button");
-    copyBtn.textContent = "📋 Copiar";
-    copyBtn.classList.add("copy-btn");
-
-    copyBtn.onclick = async () => {
-      await navigator.clipboard.writeText(content);
-      copyBtn.textContent = "✅ Copiado!";
-      setTimeout(() => copyBtn.textContent = "📋 Copiar", 1500);
-    };
-
+    contentDiv.className = "content";
+    // Se for assistant, inicia vazio para o stream. Se for user, coloca o texto puro.
+    contentDiv.innerHTML = role === "assistant" ? "" : content;
     wrapper.appendChild(contentDiv);
-    wrapper.appendChild(copyBtn);
 
-  } else {
-    wrapper.textContent = content;
-  }
+    if (role === "assistant") {
+        const copyBtn = document.createElement("button");
+        copyBtn.textContent = "📋 Copiar";
+        copyBtn.classList.add("copy-btn");
+        copyBtn.onclick = () => {
+            const rawText = wrapper.getAttribute("data-raw") || content;
+            navigator.clipboard.writeText(rawText);
+            copyBtn.textContent = "✅ Copiado!";
+            setTimeout(() => copyBtn.textContent = "📋 Copiar", 1500);
+        };
+        wrapper.appendChild(copyBtn);
+    }
 
-  messagesDiv.appendChild(wrapper);
-  messagesDiv.scrollTop = messagesDiv.scrollHeight;
-
-  return wrapper; // retorno necessário para atualizar streaming
-}
-
-function renderHistory() {
-  messagesDiv.innerHTML = "";
-  conversation.forEach(msg => {
-    if (msg.role !== "system") addMessage(msg.content, msg.role);
-  });
+    messagesDiv.appendChild(wrapper);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    return contentDiv;
 }
 
 async function sendMessage() {
-  const text = userInput.value.trim();
-  if (!text) return;
-  userInput.value = "";
+    const text = userInput.value.trim();
+    if (!text) return;
+    userInput.value = "";
 
-  addMessage(text, "user");
-  conversation.push({ role: "user", content: text });
+    conversation.push({ role: "user", content: text });
+    addMessage(text, "user");
 
+    const responseContainer = addMessage("", "assistant");
+    const parentWrapper = responseContainer.parentElement;
+    let fullText = "";
 
-  const loadingDiv = addMessage("", "assistant");
-  let buffer = "";
+    try {
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: { 
+                "Content-Type": "application/json",
+                "Authorization": "Bearer SEU_TOKEN_AQUI" // Substitua pelo seu token
+            },
+            body: JSON.stringify({
+                model: "openrouter/free",
+                messages: conversation,
+                stream: true
+            })
+        });
 
-  try {
-    const response = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "openrouter/free",
-        messages: conversation,
-        stream: true
-      })
-    });
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+            const chunk = decoder.decode(value);
+            const lines = chunk.split("\n");
 
-      const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split("\n").filter(l => l.startsWith("data: "));
+            for (const line of lines) {
+                if (!line.startsWith("data: ")) continue;
+                const data = line.slice(6).trim();
+                if (data === "[DONE]") continue;
 
-      for (const line of lines) {
-        const payload = line.replace(/^data: /, "").trim();
-        if (!payload || payload === "[DONE]") continue;
+                try {
+                    const json = JSON.parse(data);
+                    const delta = json.choices[0]?.delta?.content || "";
+                    fullText += delta;
+                    
+                    // Atualiza o HTML em tempo real sem buffers malucos
+                    responseContainer.innerHTML = marked.parse(fullText);
+                    parentWrapper.setAttribute("data-raw", fullText);
+                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                } catch (e) { }
+            }
+        }
 
-        try {
-          const json = JSON.parse(payload);
-          const content = json.choices?.[0]?.delta?.content || "";
+        conversation.push({ role: "assistant", content: fullText });
+        localStorage.setItem("chat_history", JSON.stringify(conversation));
 
-          // adiciona espaço automático para evitar palavras coladas
-          if (buffer && !/\s$/.test(buffer) && !/^[\s.,!?]/.test(content)) buffer += " ";
-
-          buffer += content;
-
-          const contentDiv = loadingDiv.querySelector("div");
-          if (contentDiv && (buffer.match(/[.!?]\s$/) || buffer.length < 50)) {
-            contentDiv.innerHTML = marked.parse(buffer);
-          }
-
-        } catch(e) { /* ignora erros de parse */ }
-      }
+    } catch (err) {
+        responseContainer.innerHTML = "Erro na requisição: " + err.message;
     }
-
-    // renderiza texto final
-    const contentDiv = loadingDiv.querySelector("div");
-    if (contentDiv) contentDiv.innerHTML = marked.parse(buffer);
-
-    conversation.push({ role: "assistant", content: buffer });
-    saveHistory();
-
-  } catch(err) {
-    const contentDiv = loadingDiv.querySelector("div");
-    if (contentDiv) contentDiv.innerHTML = "Erro: " + err.message;
-  }
 }
 
-userInput.addEventListener("keypress", e => {
-  if (e.key === "Enter") sendMessage();
-});
-
-
+userInput.addEventListener("keypress", e => { if (e.key === "Enter") sendMessage(); });
+// Carregar histórico inicial
+if(conversation.length > 1) {
+    conversation.forEach(m => { if(m.role !== 'system') {
+        const div = addMessage(m.content, m.role);
+        if(m.role === 'assistant') div.innerHTML = marked.parse(m.content);
+    }});
+}
 </script>
-
 </body>
 </html>
