@@ -5,20 +5,25 @@
     <title>Chat OpenRouter</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
-        body { margin: 0; background: #343541; font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; height: 100vh; }
+        body { margin: 0; background: #343541; font-family: 'Segoe UI', Arial, sans-serif; display: flex; justify-content: center; height: 100vh; }
         .chat-wrapper { width: 100%; max-width: 850px; display: flex; flex-direction: column; height: 100vh; }
-        .messages { flex: 1; overflow-y: auto; padding: 20px; }
+        .messages { flex: 1; overflow-y: auto; padding: 20px; scroll-behavior: smooth; }
         .message { margin-bottom: 25px; line-height: 1.6; color: #ececf1; }
-        .user { text-align: right; background: #444654; padding: 10px 15px; border-radius: 10px; margin-left: auto; max-width: 80%; }
-        .assistant { background: #444654; padding: 20px; border-radius: 8px; border: 1px solid #565869; }
-        /* Corrige tabelas e códigos que "vazam" da tela */
-        .assistant table { border-collapse: collapse; width: 100%; margin: 10px 0; }
-        .assistant th, .assistant td { border: 1px solid #666; padding: 8px; text-align: left; }
-        .assistant pre { background: #000; padding: 15px; overflow-x: auto; border-radius: 5px; }
-        .copy-btn { margin-top: 10px; background: #19c37d; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; color: white; }
-        .input-area { display: flex; padding: 20px; background: #40414f; gap: 10px; }
-        input { flex: 1; padding: 15px; border-radius: 5px; border: none; background: #40414f; color: white; border: 1px solid #565869; outline: none; }
-        button.send-btn { padding: 0 20px; border-radius: 5px; border: none; background: #19c37d; color: white; cursor: pointer; font-weight: bold; }
+        .user { text-align: right; background: #444654; padding: 12px 18px; border-radius: 15px; margin-left: auto; max-width: 80%; border: 1px solid #565869; }
+        .assistant { background: #444654; padding: 20px; border-radius: 8px; border: 1px solid #565869; position: relative; }
+        
+        /* Estilo para Tabelas e Códigos */
+        .assistant table { border-collapse: collapse; width: 100%; margin: 15px 0; background: #2d2e37; }
+        .assistant th, .assistant td { border: 1px solid #565869; padding: 10px; text-align: left; }
+        .assistant pre { background: #000; padding: 15px; overflow-x: auto; border-radius: 5px; border: 1px solid #333; }
+        .assistant code { font-family: 'Consolas', monospace; color: #e2e2e2; }
+
+        .copy-btn { margin-top: 15px; background: #19c37d; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; color: white; font-weight: bold; transition: 0.2s; }
+        .copy-btn:hover { background: #1aae71; }
+        
+        .input-area { display: flex; padding: 25px; background: #40414f; gap: 10px; }
+        input { flex: 1; padding: 15px; border-radius: 6px; border: 1px solid #565869; background: #40414f; color: white; font-size: 16px; outline: none; }
+        button.send-btn { padding: 0 25px; border-radius: 6px; border: none; background: #19c37d; color: white; cursor: pointer; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -26,7 +31,7 @@
 <div class="chat-wrapper">
     <div class="messages" id="messages"></div>
     <div class="input-area">
-        <input id="userInput" placeholder="Mande sua dúvida..." autofocus />
+        <input id="userInput" placeholder="Digite sua mensagem..." autofocus />
         <button class="send-btn" onclick="sendMessage()">Enviar</button>
     </div>
 </div>
@@ -35,31 +40,57 @@
 const messagesDiv = document.getElementById("messages");
 const userInput = document.getElementById("userInput");
 
-let conversation = JSON.parse(localStorage.getItem("chat_history")) || [
-    { role: "system", content: "Você é um assistente especialista. Use Markdown." }
-];
+// 1) Adiciona a saudação inicial se o chat estiver vazio
+let conversation = JSON.parse(localStorage.getItem("chat_history")) || [];
 
-function addMessage(content, role) {
+if (conversation.length === 0) {
+    conversation.push({ role: "system", content: "Você é um assistente especialista. Responda em português e use Markdown." });
+    // Mensagem visual de boas-vindas
+    setTimeout(() => {
+        addMessage("Olá! Qual sua dúvida?", "assistant", false);
+    }, 500);
+}
+
+function stripMarkdown(text) {
+    // Remove marcações de negrito, itálico, links e blocos de código para o Word não pirar
+    return text
+        .replace(/\*\*\*(.*?)\*\*\*/g, '$1')
+        .replace(/\*\*(.*?)\*\*/g, '$1')
+        .replace(/\*(.*?)\*/g, '$1')
+        .replace(/`{3,}.*?\n([\s\S]*?)\n`{3,}/g, '$1')
+        .replace(/`(.*?)`/g, '$1')
+        .replace(/\[(.*?)\]\(.*?\)/g, '$1');
+}
+
+function addMessage(content, role, save = true) {
     const div = document.createElement("div");
     div.classList.add("message", role);
     const inner = document.createElement("div");
+    
+    // Renderiza MD se for assistente
     inner.innerHTML = role === "assistant" ? marked.parse(content) : content;
     div.appendChild(inner);
     
     if (role === "assistant") {
         const btn = document.createElement("button");
         btn.className = "copy-btn";
-        btn.innerText = "📋 Copiar";
+        btn.innerText = "📋 Copiar para Word";
         btn.onclick = () => {
-            navigator.clipboard.writeText(div.getAttribute("data-raw") || content);
-            btn.innerText = "✅";
-            setTimeout(() => btn.innerText = "📋 Copiar", 1000);
+            const rawText = div.getAttribute("data-raw") || content;
+            const cleanText = stripMarkdown(rawText); // Limpa o MD antes de copiar
+            navigator.clipboard.writeText(cleanText);
+            btn.innerText = "✅ Texto Limpo!";
+            setTimeout(() => btn.innerText = "📋 Copiar para Word", 2000);
         };
         div.appendChild(btn);
     }
     
     messagesDiv.appendChild(div);
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    
+    if (save && role !== "system") {
+        div.setAttribute("data-raw", content);
+    }
     return inner;
 }
 
@@ -88,17 +119,14 @@ async function sendMessage() {
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-        let partialChunk = ""; // Para lidar com JSONs cortados no meio
+        let partialChunk = "";
 
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
 
-            // Acumula o que veio da stream
             partialChunk += decoder.decode(value, { stream: true });
-            
-            const lines = partialChunk.split("\n");
-            // Mantém a última linha no buffer porque ela pode estar incompleta
+            let lines = partialChunk.split("\n");
             partialChunk = lines.pop();
 
             for (const line of lines) {
@@ -106,19 +134,16 @@ async function sendMessage() {
                 if (!trimmed || trimmed === "[DONE]") continue;
 
                 try {
-                    const json = JSON.parse(trimmed);
-                    const content = json.choices[0]?.delta?.content || "";
-                    fullText += content;
-                    
-                    // Renderiza o markdown atualizado
-                    assistantDiv.innerHTML = marked.parse(fullText);
-                    parentWrapper.setAttribute("data-raw", fullText);
-                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-                } catch (e) {
-                    // Se falhou o parse, a linha provavelmente está incompleta, 
-                    // volta ela para o buffer (embora o pop/push já ajude)
-                    console.error("Erro no parse do stream", e);
-                }
+                    if (trimmed.startsWith('{')) {
+                        const json = JSON.parse(trimmed);
+                        const content = json.choices[0]?.delta?.content || "";
+                        fullText += content;
+                        
+                        assistantDiv.innerHTML = marked.parse(fullText);
+                        parentWrapper.setAttribute("data-raw", fullText);
+                        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                    }
+                } catch (e) {}
             }
         }
 
@@ -130,12 +155,16 @@ async function sendMessage() {
     }
 }
 
-// Atalho Enter
 userInput.addEventListener("keypress", e => { if(e.key === 'Enter') sendMessage(); });
 
-// Carrega histórico
-if(conversation.length > 1) {
-    conversation.forEach(m => { if(m.role !== 'system') addMessage(m.content, m.role); });
+// Carrega histórico existente
+if (conversation.length > 1) {
+    conversation.forEach(m => {
+        if (m.role !== 'system') {
+            const el = addMessage(m.content, m.role, false);
+            el.parentElement.setAttribute("data-raw", m.content);
+        }
+    });
 }
 </script>
 </body>
