@@ -133,6 +133,8 @@ function addMessage(content, role) {
 
   messagesDiv.appendChild(wrapper);
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+  return wrapper; // ✅ Retorna para poder atualizar streaming
 }
 
 function renderHistory() {
@@ -151,7 +153,7 @@ async function sendMessage() {
 
   addMessage(text, "user");
   conversation.push({ role: "user", content: text });
-  //saveHistory();
+  saveHistory();
 
   const loadingDiv = addMessage("Pensando...", "assistant");
 
@@ -159,7 +161,11 @@ async function sendMessage() {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "openrouter/free", messages: conversation, stream: true })
+      body: JSON.stringify({
+        model: "openrouter/free",
+        messages: conversation,
+        stream: true
+      })
     });
 
     const reader = response.body.getReader();
@@ -169,15 +175,20 @@ async function sendMessage() {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      result += decoder.decode(value);
-      loadingDiv.querySelector("div").innerHTML = marked.parse(result);
+      result += decoder.decode(value, { stream: true });
+
+      const contentDiv = loadingDiv.querySelector("div");
+      if (contentDiv) {
+        contentDiv.innerHTML = marked.parse(result);
+      }
     }
 
     conversation.push({ role: "assistant", content: result });
     saveHistory();
 
   } catch (err) {
-    loadingDiv.querySelector("div").innerHTML = "Erro: " + err.message;
+    const contentDiv = loadingDiv.querySelector("div");
+    if (contentDiv) contentDiv.innerHTML = "Erro: " + err.message;
   }
 }
 
@@ -185,7 +196,7 @@ userInput.addEventListener("keypress", e => {
   if (e.key === "Enter") sendMessage();
 });
 
-//renderHistory();
+renderHistory();
 </script>
 
 </body>
